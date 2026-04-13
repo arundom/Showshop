@@ -12,7 +12,6 @@ class DetailScreen extends StatelessWidget {
   final Item item;
 
   static final _dateFormat = DateFormat('dd MMMM yyyy');
-  static final _priceFormat = NumberFormat.currency(symbol: '₹');
 
   @override
   Widget build(BuildContext context) {
@@ -34,7 +33,7 @@ class DetailScreen extends StatelessWidget {
             const SizedBox(height: 24),
 
             // ── Description ────────────────────────────────────────────────
-            _SectionLabel(label: 'Description'),
+            const _SectionLabel(label: 'Description'),
             const SizedBox(height: 4),
             Text(item.description, style: theme.textTheme.bodyLarge),
             const SizedBox(height: 20),

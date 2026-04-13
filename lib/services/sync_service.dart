@@ -31,7 +31,7 @@ class SyncService {
   }) : _db = databaseService ?? DatabaseService();
 
   final DatabaseService _db;
-  StreamSubscription<List<ConnectivityResult>>? _connectivitySubscription;
+  StreamSubscription<ConnectivityResult>? _connectivitySubscription;
 
   bool _isSyncing = false;
 
@@ -61,14 +61,14 @@ class SyncService {
 
   // ── Internals ───────────────────────────────────────────────────────────────
 
-  void _onConnectivityChanged(List<ConnectivityResult> results) {
-    if (_isOnline(results)) {
+  void _onConnectivityChanged(ConnectivityResult result) {
+    if (_isOnline(result)) {
       _syncPendingItems();
     }
   }
 
-  bool _isOnline(List<ConnectivityResult> results) =>
-      results.any((r) => r != ConnectivityResult.none);
+  bool _isOnline(ConnectivityResult result) =>
+      result != ConnectivityResult.none;
 
   Future<void> _syncPendingItems() async {
     if (_isSyncing) return;
