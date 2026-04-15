@@ -107,8 +107,13 @@ class SyncService {
   /// return response.statusCode == 201;
   /// ```
   Future<bool> _pushItemToRemote(Item item) async {
+    
     // TODO: implement your remote push logic here.
     // Returning false keeps is_synced = 0 so it will be retried next time.
+    
+    // Supabase URL: https://rdyszutpwabhqimvltvq.supabase.co
+    // Anon public key: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJkeXN6dXRwd2FiaHFpbXZsdHZxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYyMzY1NDcsImV4cCI6MjA5MTgxMjU0N30.fz6BzWiirFWzkTFY_DuPWoJE9qZ5xF8kEKkfrCjpd3s
+    
     return false;
   }
 }
