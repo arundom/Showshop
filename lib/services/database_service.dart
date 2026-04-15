@@ -96,8 +96,10 @@ class DatabaseService {
         try {
           await db.execute(
               'ALTER TABLE $_tableName ADD COLUMN ${entry.key} ${entry.value}');
-        } catch (_) {
-          // Column may already exist — safe to ignore.
+        } catch (e) {
+          // Column may already exist — safe to ignore duplicate-column errors.
+          // ignore: avoid_print
+          print('DatabaseService migration: adding ${entry.key}: $e');
         }
       }
 
@@ -107,8 +109,10 @@ class DatabaseService {
           "UPDATE $_tableName SET image_urls = "
           "json_array(image_url) WHERE image_url IS NOT NULL AND image_url != ''",
         );
-      } catch (_) {
-        // image_url column may not exist in all cases.
+      } catch (e) {
+        // image_url column may not exist in v1 databases — safe to ignore.
+        // ignore: avoid_print
+        print('DatabaseService migration: image_url copy: $e');
       }
 
       // Create item_images table.
@@ -281,5 +285,22 @@ class DatabaseService {
     final db = await database;
     await db.close();
     _database = null;
+  }
+
+  /// Atomically replaces item [oldId] with [newItem] (different id) inside a
+  /// single transaction, preventing a window where both records coexist.
+  Future<void> replaceItem({
+    required String oldId,
+    required Item newItem,
+  }) async {
+    final db = await database;
+    await db.transaction((txn) async {
+      await txn.insert(
+        _tableName,
+        newItem.toMap(),
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+      await txn.delete(_tableName, where: 'id = ?', whereArgs: [oldId]);
+    });
   }
 }

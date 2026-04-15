@@ -125,11 +125,7 @@ class Item {
       brand: json['brand'] as String?,
       knownIssues: json['known_issues'] as String?,
       imageUrls: imageUrls,
-      listingDate: json['listing_date'] != null
-          ? DateTime.parse(json['listing_date'] as String)
-          : (json['created_at'] != null
-              ? DateTime.parse(json['created_at'] as String)
-              : DateTime.now()),
+      listingDate: _parseDateFromJson(json),
       condition: json['condition'] as String?,
       sellerName: json['seller_name'] as String?,
       sellerContact: json['seller_contact'] as String?,
@@ -142,6 +138,18 @@ class Item {
           ? DateTime.tryParse(json['updated_at'] as String)
           : null,
     );
+  }
+
+  /// Extracts [listingDate] from a Supabase JSON row, falling back to
+  /// [created_at] and then [DateTime.now] when neither field is present.
+  static DateTime _parseDateFromJson(Map<String, dynamic> json) {
+    if (json['listing_date'] != null) {
+      return DateTime.parse(json['listing_date'] as String);
+    }
+    if (json['created_at'] != null) {
+      return DateTime.parse(json['created_at'] as String);
+    }
+    return DateTime.now();
   }
 
   /// Converts this [Item] to a JSON map for Supabase upload.

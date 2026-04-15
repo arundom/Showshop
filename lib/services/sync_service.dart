@@ -62,8 +62,10 @@ class SyncService {
       for (final item in remoteItems) {
         await _db.upsertItem(item);
       }
-    } catch (_) {
+    } catch (e, st) {
       // Network errors are non-fatal; local data remains available.
+      // ignore: avoid_print
+      print('SyncService.syncFromServer error: $e\n$st');
     }
   }
 
@@ -98,32 +100,38 @@ class SyncService {
   /// Returns `true` on success, `false` on failure (item will be retried).
   Future<bool> _pushItemToRemote(Item item) async {
     try {
+      final localId = item.id;
       final existing =
-          item.id != null ? await _remote.getItemById(item.id!) : null;
+          localId != null ? await _remote.getItemById(localId) : null;
 
       if (existing != null) {
-        await _remote.updateItem(item.id!, item);
+        await _remote.updateItem(localId!, item);
       } else {
         final remoteId = await _remote.createItem(item);
 
-        // If the local id differs from the Supabase-assigned id, update it.
-        if (item.id != remoteId) {
+        // If the local id differs from the Supabase-assigned id (or was null),
+        // atomically replace the local record with the Supabase UUID so there
+        // is never a window where both records coexist.
+        if (localId != remoteId) {
           final updated = item.copyWith(id: remoteId, isSynced: true);
-          await _db.upsertItem(updated);
-          if (item.id != null) await _db.deleteItem(item.id!);
-          await _db.markAsSynced(remoteId);
+          if (localId != null) {
+            await _db.replaceItem(oldId: localId, newItem: updated);
+          } else {
+            await _db.upsertItem(updated);
+          }
           return true;
         }
       }
 
       // Upload any local images that haven't been synced yet.
-      if (item.id != null) {
-        final images = await _db.getItemImages(item.id!);
+      final currentId = item.id;
+      if (currentId != null) {
+        final images = await _db.getItemImages(currentId);
         for (var i = 0; i < images.length; i++) {
           final img = images[i];
           if ((img['synced'] as int? ?? 0) == 0) {
             await _remote.addItemImage(
-              item.id!,
+              currentId,
               img['image_url'] as String,
               img['display_order'] as int? ?? i,
             );
@@ -132,7 +140,9 @@ class SyncService {
       }
 
       return true;
-    } catch (_) {
+    } catch (e, st) {
+      // ignore: avoid_print
+      print('SyncService._pushItemToRemote error: $e\n$st');
       return false;
     }
   }
