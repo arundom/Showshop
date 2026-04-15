@@ -2,14 +2,25 @@ import 'package:flutter/foundation.dart';
 
 import '../models/item.dart';
 import '../services/database_service.dart';
+import '../services/supabase_service.dart';
 
 /// Provides the list of [Item] objects to the widget tree and exposes
 /// methods to add, update, and delete items.
+///
+/// ## Write path
+/// New items are written **directly to Supabase** so they are immediately
+/// visible to all users. After Supabase confirms the write and returns the
+/// server-assigned UUID, the item is also cached in local SQLite so it can
+/// be viewed offline. Callers must ensure connectivity before calling [addItem].
 class ItemProvider extends ChangeNotifier {
-  ItemProvider({DatabaseService? databaseService})
-      : _db = databaseService ?? DatabaseService();
+  ItemProvider({
+    DatabaseService? databaseService,
+    SupabaseService? supabaseService,
+  })  : _db = databaseService ?? DatabaseService(),
+        _remote = supabaseService ?? SupabaseService();
 
   final DatabaseService _db;
+  final SupabaseService _remote;
 
   List<Item> _items = [];
   bool _isLoading = false;
@@ -38,10 +49,19 @@ class ItemProvider extends ChangeNotifier {
 
   // ── Mutations ─────────────────────────────────────────────────────────────
 
+  /// Creates [item] in Supabase and caches it locally.
+  ///
+  /// Throws if the network call fails — callers should check connectivity
+  /// before invoking this method and surface the error to the user.
   Future<void> addItem(Item item) async {
-    final id = await _db.insertItem(item);
-    _items.insert(0, item.copyWith(id: id));
-    // Re-sort by listing date descending so the new item appears at top.
+    // Write to Supabase; the server generates and returns the UUID.
+    final remoteId = await _remote.createItem(item);
+    final synced = item.copyWith(id: remoteId, isSynced: true);
+
+    // Cache locally so the item is viewable offline.
+    await _db.upsertItem(synced);
+
+    _items.insert(0, synced);
     _items.sort((a, b) => b.listingDate.compareTo(a.listingDate));
     notifyListeners();
   }
