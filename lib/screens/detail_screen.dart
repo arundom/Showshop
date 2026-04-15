@@ -78,7 +78,8 @@ class DetailScreen extends StatelessWidget {
                                   fit: BoxFit.cover,
                                   width: double.infinity,
                                   height: double.infinity,
-                                  errorBuilder: (_, __, ___) => Text(
+                                  errorBuilder: (context, error, stackTrace) =>
+                                      Text(
                                     'image ${index + 1}',
                                     style: const TextStyle(
                                         fontSize: 14, color: Colors.black54),

@@ -88,7 +88,7 @@ class DatabaseService {
         'original_price': 'REAL',
         'brand': 'TEXT',
         'known_issues': 'TEXT',
-        "image_urls": "TEXT NOT NULL DEFAULT '[]'",
+        "image_urls": r"TEXT NOT NULL DEFAULT '[]'",
         'created_at': 'TEXT',
         'updated_at': 'TEXT',
       };
@@ -288,19 +288,21 @@ class DatabaseService {
   }
 
   /// Atomically replaces item [oldId] with [newItem] (different id) inside a
-  /// single transaction, preventing a window where both records coexist.
+  /// single transaction to prevent a window where both records coexist.
+  /// The old record is deleted before the new one is inserted to avoid any
+  /// primary-key conflict if the ids were ever identical.
   Future<void> replaceItem({
     required String oldId,
     required Item newItem,
   }) async {
     final db = await database;
     await db.transaction((txn) async {
+      await txn.delete(_tableName, where: 'id = ?', whereArgs: [oldId]);
       await txn.insert(
         _tableName,
         newItem.toMap(),
         conflictAlgorithm: ConflictAlgorithm.replace,
       );
-      await txn.delete(_tableName, where: 'id = ?', whereArgs: [oldId]);
     });
   }
 }

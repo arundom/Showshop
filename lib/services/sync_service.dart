@@ -99,43 +99,37 @@ class SyncService {
   /// Pushes [item] to Supabase.
   /// Returns `true` on success, `false` on failure (item will be retried).
   Future<bool> _pushItemToRemote(Item item) async {
+    // Items without a local id cannot be reliably synced or deduplicated.
+    if (item.id == null) return false;
+    final localId = item.id!;
+
     try {
-      final localId = item.id;
-      final existing =
-          localId != null ? await _remote.getItemById(localId) : null;
+      final existing = await _remote.getItemById(localId);
 
       if (existing != null) {
-        await _remote.updateItem(localId!, item);
+        await _remote.updateItem(localId, item);
       } else {
         final remoteId = await _remote.createItem(item);
 
-        // If the local id differs from the Supabase-assigned id (or was null),
-        // atomically replace the local record with the Supabase UUID so there
-        // is never a window where both records coexist.
+        // If the local id differs from the Supabase-assigned id, atomically
+        // replace the local record with the Supabase UUID.
         if (localId != remoteId) {
           final updated = item.copyWith(id: remoteId, isSynced: true);
-          if (localId != null) {
-            await _db.replaceItem(oldId: localId, newItem: updated);
-          } else {
-            await _db.upsertItem(updated);
-          }
+          await _db.replaceItem(oldId: localId, newItem: updated);
           return true;
         }
       }
 
       // Upload any local images that haven't been synced yet.
-      final currentId = item.id;
-      if (currentId != null) {
-        final images = await _db.getItemImages(currentId);
-        for (var i = 0; i < images.length; i++) {
-          final img = images[i];
-          if ((img['synced'] as int? ?? 0) == 0) {
-            await _remote.addItemImage(
-              currentId,
-              img['image_url'] as String,
-              img['display_order'] as int? ?? i,
-            );
-          }
+      final images = await _db.getItemImages(localId);
+      for (var i = 0; i < images.length; i++) {
+        final img = images[i];
+        if ((img['synced'] as int? ?? 0) == 0) {
+          await _remote.addItemImage(
+            localId,
+            img['image_url'] as String,
+            img['display_order'] as int? ?? i,
+          );
         }
       }
 
