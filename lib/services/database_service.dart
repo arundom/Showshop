@@ -8,6 +8,11 @@ import '../models/item.dart';
 /// The database stores items offline so they are available without a network
 /// connection.  An [isSynced] flag marks rows that have been pushed to the
 /// remote backend so the [SyncService] knows what still needs uploading.
+///
+/// Schema version history:
+/// - v1: initial schema (integer id, single image_url)
+/// - v2: UUID text id, new fields (title, original_price, brand,
+///       known_issues, image_urls, created_at, updated_at), item_images table
 class DatabaseService {
   static final DatabaseService _instance = DatabaseService._internal();
   factory DatabaseService() => _instance;
@@ -16,7 +21,8 @@ class DatabaseService {
   static Database? _database;
 
   static const String _tableName = 'items';
-  static const int _dbVersion = 1;
+  static const String _imagesTable = 'item_images';
+  static const int _dbVersion = 2;
 
   Future<Database> get database async {
     _database ??= await _initDatabase();
@@ -36,36 +42,127 @@ class DatabaseService {
   }
 
   Future<void> _onCreate(Database db, int version) async {
+    await _createTablesV2(db);
+  }
+
+  Future<void> _createTablesV2(Database db) async {
     await db.execute('''
-      CREATE TABLE $_tableName (
-        id            INTEGER PRIMARY KEY AUTOINCREMENT,
-        description   TEXT    NOT NULL,
-        price         REAL    NOT NULL,
-        listing_date  TEXT    NOT NULL,
-        image_url     TEXT,
-        condition     TEXT,
-        seller_name   TEXT,
-        seller_contact TEXT,
-        notes         TEXT,
-        is_synced     INTEGER NOT NULL DEFAULT 0
+      CREATE TABLE IF NOT EXISTS $_tableName (
+        id              TEXT    PRIMARY KEY,
+        title           TEXT,
+        description     TEXT    NOT NULL,
+        price           REAL    NOT NULL,
+        original_price  REAL,
+        brand           TEXT,
+        known_issues    TEXT,
+        image_urls      TEXT    NOT NULL DEFAULT '[]',
+        listing_date    TEXT    NOT NULL,
+        condition       TEXT,
+        seller_name     TEXT,
+        seller_contact  TEXT,
+        notes           TEXT,
+        is_synced       INTEGER NOT NULL DEFAULT 0,
+        created_at      TEXT,
+        updated_at      TEXT
+      )
+    ''');
+
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS $_imagesTable (
+        id            TEXT    PRIMARY KEY,
+        item_id       TEXT    NOT NULL,
+        image_url     TEXT    NOT NULL,
+        display_order INTEGER NOT NULL DEFAULT 0,
+        created_at    TEXT,
+        synced        INTEGER NOT NULL DEFAULT 0,
+        FOREIGN KEY (item_id) REFERENCES $_tableName(id) ON DELETE CASCADE
       )
     ''');
   }
 
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
-    // Future schema migrations go here.
+    if (oldVersion < 2) {
+      // Add new columns to items table (ignore errors if column already exists).
+      final newColumns = {
+        'title': 'TEXT',
+        'original_price': 'REAL',
+        'brand': 'TEXT',
+        'known_issues': 'TEXT',
+        "image_urls": r"TEXT NOT NULL DEFAULT '[]'",
+        'created_at': 'TEXT',
+        'updated_at': 'TEXT',
+      };
+      for (final entry in newColumns.entries) {
+        try {
+          await db.execute(
+              'ALTER TABLE $_tableName ADD COLUMN ${entry.key} ${entry.value}');
+        } catch (e) {
+          // Column may already exist — safe to ignore duplicate-column errors.
+          // ignore: avoid_print
+          print('DatabaseService migration: adding ${entry.key}: $e');
+        }
+      }
+
+      // Migrate old image_url values into image_urls JSON array.
+      try {
+        await db.execute(
+          "UPDATE $_tableName SET image_urls = "
+          "json_array(image_url) WHERE image_url IS NOT NULL AND image_url != ''",
+        );
+      } catch (e) {
+        // image_url column may not exist in v1 databases — safe to ignore.
+        // ignore: avoid_print
+        print('DatabaseService migration: image_url copy: $e');
+      }
+
+      // Create item_images table.
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS $_imagesTable (
+          id            TEXT    PRIMARY KEY,
+          item_id       TEXT    NOT NULL,
+          image_url     TEXT    NOT NULL,
+          display_order INTEGER NOT NULL DEFAULT 0,
+          created_at    TEXT,
+          synced        INTEGER NOT NULL DEFAULT 0,
+          FOREIGN KEY (item_id) REFERENCES $_tableName(id) ON DELETE CASCADE
+        )
+      ''');
+
+      // Convert old integer primary key rows to TEXT by recreating the table.
+      // We use a temp-table approach so existing data is preserved.
+      await db.execute('ALTER TABLE $_tableName RENAME TO _items_old');
+      await _createTablesV2(db);
+      await db.execute('''
+        INSERT INTO $_tableName (
+          id, title, description, price, original_price, brand,
+          known_issues, image_urls, listing_date, condition,
+          seller_name, seller_contact, notes, is_synced,
+          created_at, updated_at
+        )
+        SELECT
+          CAST(id AS TEXT), title, description, price, original_price, brand,
+          known_issues,
+          COALESCE(image_urls, '[]'),
+          listing_date, condition, seller_name, seller_contact, notes,
+          is_synced, created_at, updated_at
+        FROM _items_old
+      ''');
+      await db.execute('DROP TABLE _items_old');
+    }
   }
 
   // ── CRUD ────────────────────────────────────────────────────────────────────
 
-  /// Inserts [item] and returns the new row id.
-  Future<int> insertItem(Item item) async {
+  /// Inserts [item] and returns the item's id (UUID string).
+  Future<String> insertItem(Item item) async {
     final db = await database;
-    return db.insert(
+    final map = item.toMap();
+    await db.insert(
       _tableName,
-      item.toMap(),
+      map,
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
+    return map['id'] as String;
   }
 
   /// Returns all items ordered by [listingDate] descending (newest first).
@@ -79,7 +176,7 @@ class DatabaseService {
   }
 
   /// Returns a single item by [id], or `null` if not found.
-  Future<Item?> getItemById(int id) async {
+  Future<Item?> getItemById(String id) async {
     final db = await database;
     final rows = await db.query(
       _tableName,
@@ -103,9 +200,50 @@ class DatabaseService {
   }
 
   /// Deletes the item with [id].
-  Future<int> deleteItem(int id) async {
+  Future<int> deleteItem(String id) async {
     final db = await database;
     return db.delete(_tableName, where: 'id = ?', whereArgs: [id]);
+  }
+
+  // ── Item Images ────────────────────────────────────────────────────────────
+
+  /// Returns all image records for the item with [itemId].
+  Future<List<Map<String, dynamic>>> getItemImages(String itemId) async {
+    final db = await database;
+    return db.query(
+      _imagesTable,
+      where: 'item_id = ?',
+      whereArgs: [itemId],
+      orderBy: 'display_order ASC',
+    );
+  }
+
+  /// Inserts an image record for [itemId].
+  Future<void> insertItemImage({
+    required String id,
+    required String itemId,
+    required String imageUrl,
+    required int displayOrder,
+  }) async {
+    final db = await database;
+    await db.insert(
+      _imagesTable,
+      {
+        'id': id,
+        'item_id': itemId,
+        'image_url': imageUrl,
+        'display_order': displayOrder,
+        'created_at': DateTime.now().toIso8601String(),
+        'synced': 0,
+      },
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  /// Deletes all image records for [itemId].
+  Future<void> deleteItemImages(String itemId) async {
+    final db = await database;
+    await db.delete(_imagesTable, where: 'item_id = ?', whereArgs: [itemId]);
   }
 
   // ── Sync helpers ────────────────────────────────────────────────────────────
@@ -122,7 +260,7 @@ class DatabaseService {
   }
 
   /// Marks the item with [id] as synced so it is not re-uploaded.
-  Future<void> markAsSynced(int id) async {
+  Future<void> markAsSynced(String id) async {
     final db = await database;
     await db.update(
       _tableName,
@@ -132,10 +270,39 @@ class DatabaseService {
     );
   }
 
+  /// Upserts an item received from the remote into local SQLite.
+  Future<void> upsertItem(Item item) async {
+    final db = await database;
+    await db.insert(
+      _tableName,
+      item.toMap(),
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
   /// Closes the database connection (useful in tests).
   Future<void> close() async {
     final db = await database;
     await db.close();
     _database = null;
+  }
+
+  /// Atomically replaces item [oldId] with [newItem] (different id) inside a
+  /// single transaction to prevent a window where both records coexist.
+  /// The old record is deleted before the new one is inserted to avoid any
+  /// primary-key conflict if the ids were ever identical.
+  Future<void> replaceItem({
+    required String oldId,
+    required Item newItem,
+  }) async {
+    final db = await database;
+    await db.transaction((txn) async {
+      await txn.delete(_tableName, where: 'id = ?', whereArgs: [oldId]);
+      await txn.insert(
+        _tableName,
+        newItem.toMap(),
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+    });
   }
 }

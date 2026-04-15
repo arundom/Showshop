@@ -32,7 +32,7 @@ class _FakeItemProvider extends ChangeNotifier implements ItemProvider {
 
   @override
   Future<void> addItem(Item item) async {
-    _items = [item.copyWith(id: _items.length + 1), ..._items];
+    _items = [item.copyWith(id: '${_items.length + 1}'), ..._items];
     notifyListeners();
   }
 
@@ -46,7 +46,7 @@ class _FakeItemProvider extends ChangeNotifier implements ItemProvider {
   }
 
   @override
-  Future<void> deleteItem(int id) async {
+  Future<void> deleteItem(String id) async {
     _items = _items.where((i) => i.id != id).toList();
     notifyListeners();
   }
@@ -63,7 +63,7 @@ Widget _wrapWithProvider(Widget child, _FakeItemProvider provider) {
 
 final _sampleItems = [
   Item(
-    id: 1,
+    id: '1',
     description: 'Samsung 65" 4K TV',
     price: 25000,
     listingDate: DateTime(2024, 3, 15),
@@ -74,7 +74,7 @@ final _sampleItems = [
     isSynced: false,
   ),
   Item(
-    id: 2,
+    id: '2',
     description: 'Sony PlayStation 5',
     price: 35000,
     listingDate: DateTime(2024, 3, 10),
@@ -82,7 +82,7 @@ final _sampleItems = [
     isSynced: true,
   ),
   Item(
-    id: 3,
+    id: '3',
     description: 'IKEA Dining Table',
     price: 8000,
     listingDate: DateTime(2024, 2, 20),
@@ -125,6 +125,65 @@ void main() {
 
       final unsynced = _sampleItems[0].toMap();
       expect(unsynced['is_synced'], 0);
+    });
+
+    test('fromJson parses Supabase response', () {
+      final json = {
+        'id': 'abc-123',
+        'title': 'Test Racket',
+        'description': 'A badminton racket',
+        'price': 500.0,
+        'original_price': 1200.0,
+        'brand': 'Yonex',
+        'known_issues': 'Minor scratch',
+        'listing_date': '2024-03-15T00:00:00.000',
+        'created_at': '2024-03-15T00:00:00.000',
+        'updated_at': '2024-03-15T00:00:00.000',
+        'item_images': [
+          {'image_url': 'https://example.com/img1.jpg', 'display_order': 0},
+        ],
+      };
+      final item = Item.fromJson(json);
+
+      expect(item.id, 'abc-123');
+      expect(item.title, 'Test Racket');
+      expect(item.originalPrice, 1200.0);
+      expect(item.brand, 'Yonex');
+      expect(item.knownIssues, 'Minor scratch');
+      expect(item.imageUrls, ['https://example.com/img1.jpg']);
+      expect(item.isSynced, isTrue);
+    });
+
+    test('toJson produces Supabase-compatible map', () {
+      final item = Item(
+        id: 'uuid-1',
+        title: 'TV',
+        description: 'Big screen TV',
+        price: 20000,
+        originalPrice: 45000,
+        brand: 'Samsung',
+        listingDate: DateTime(2024, 1, 1),
+      );
+      final json = item.toJson();
+
+      expect(json['id'], 'uuid-1');
+      expect(json['title'], 'TV');
+      expect(json['price'], 20000);
+      expect(json.containsKey('original_price'), isTrue);
+      // image_urls should NOT be in toJson (managed via item_images table)
+      expect(json.containsKey('image_urls'), isFalse);
+    });
+
+    test('imageUrls round-trip through toMap / fromMap', () {
+      final item = Item(
+        id: 'img-test',
+        description: 'Item with images',
+        price: 100,
+        listingDate: DateTime(2024, 1, 1),
+        imageUrls: ['https://a.com/1.jpg', 'https://a.com/2.jpg'],
+      );
+      final restored = Item.fromMap(item.toMap());
+      expect(restored.imageUrls, item.imageUrls);
     });
   });
 
@@ -255,6 +314,40 @@ void main() {
       );
 
       expect(find.text('Condition'), findsNothing);
+    });
+
+    testWidgets('shows green buttons for optional fields', (tester) async {
+      final item = Item(
+        id: 'test-1',
+        description: 'Test item',
+        price: 500,
+        listingDate: DateTime(2024, 1, 1),
+        originalPrice: 1200,
+        brand: 'Yonex',
+        knownIssues: 'Minor scratch',
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(home: DetailScreen(item: item)),
+      );
+
+      expect(find.text('Original Price'), findsOneWidget);
+      expect(find.text('Brand'), findsOneWidget);
+      expect(find.text('Known Issues'), findsOneWidget);
+      expect(find.text('Yonex'), findsOneWidget);
+    });
+
+    testWidgets('shows image placeholders in 2x2 grid', (tester) async {
+      final item = _sampleItems.first;
+
+      await tester.pumpWidget(
+        MaterialApp(home: DetailScreen(item: item)),
+      );
+
+      expect(find.text('image 1'), findsOneWidget);
+      expect(find.text('image 2'), findsOneWidget);
+      expect(find.text('image 3'), findsOneWidget);
+      expect(find.text('image 4'), findsOneWidget);
     });
   });
 }
