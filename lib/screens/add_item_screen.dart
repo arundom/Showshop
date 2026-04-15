@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 
 import '../models/item.dart';
 import '../providers/item_provider.dart';
+import '../services/sync_service.dart';
 
 /// Form screen for adding a new [Item] to the local database.
 class AddItemScreen extends StatefulWidget {
@@ -15,8 +16,12 @@ class AddItemScreen extends StatefulWidget {
 
 class _AddItemScreenState extends State<AddItemScreen> {
   final _formKey = GlobalKey<FormState>();
+  final _titleController = TextEditingController();
   final _descController = TextEditingController();
   final _priceController = TextEditingController();
+  final _originalPriceController = TextEditingController();
+  final _brandController = TextEditingController();
+  final _knownIssuesController = TextEditingController();
   final _conditionController = TextEditingController();
   final _sellerNameController = TextEditingController();
   final _sellerContactController = TextEditingController();
@@ -29,8 +34,12 @@ class _AddItemScreenState extends State<AddItemScreen> {
 
   @override
   void dispose() {
+    _titleController.dispose();
     _descController.dispose();
     _priceController.dispose();
+    _originalPriceController.dispose();
+    _brandController.dispose();
+    _knownIssuesController.dispose();
     _conditionController.dispose();
     _sellerNameController.dispose();
     _sellerContactController.dispose();
@@ -55,9 +64,23 @@ class _AddItemScreenState extends State<AddItemScreen> {
 
     setState(() => _isSaving = true);
 
+    final now = DateTime.now();
     final item = Item(
+      id: generateUuid(),
+      title: _titleController.text.trim().isEmpty
+          ? null
+          : _titleController.text.trim(),
       description: _descController.text.trim(),
       price: double.parse(_priceController.text.trim()),
+      originalPrice: _originalPriceController.text.trim().isEmpty
+          ? null
+          : double.tryParse(_originalPriceController.text.trim()),
+      brand: _brandController.text.trim().isEmpty
+          ? null
+          : _brandController.text.trim(),
+      knownIssues: _knownIssuesController.text.trim().isEmpty
+          ? null
+          : _knownIssuesController.text.trim(),
       listingDate: _listingDate,
       condition: _conditionController.text.trim().isEmpty
           ? null
@@ -71,6 +94,8 @@ class _AddItemScreenState extends State<AddItemScreen> {
       notes: _notesController.text.trim().isEmpty
           ? null
           : _notesController.text.trim(),
+      createdAt: now,
+      updatedAt: now,
     );
 
     try {
@@ -116,13 +141,25 @@ class _AddItemScreenState extends State<AddItemScreen> {
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
+            // ── Title ──────────────────────────────────────────────────
+            TextFormField(
+              controller: _titleController,
+              decoration: const InputDecoration(
+                labelText: 'Title',
+                border: OutlineInputBorder(),
+                helperText: 'E.g. Badminton Racket',
+              ),
+              textCapitalization: TextCapitalization.words,
+            ),
+            const SizedBox(height: 16),
+
             // ── Description ──────────────────────────────────────────────
             TextFormField(
               controller: _descController,
               decoration: const InputDecoration(
                 labelText: 'Description *',
                 border: OutlineInputBorder(),
-                helperText: 'E.g. Samsung 65" 4K TV',
+                helperText: 'E.g. Samsung 65" 4K TV – good condition',
               ),
               maxLines: 2,
               textCapitalization: TextCapitalization.sentences,
@@ -148,6 +185,51 @@ class _AddItemScreenState extends State<AddItemScreen> {
                 }
                 return null;
               },
+            ),
+            const SizedBox(height: 16),
+
+            // ── Original Price ───────────────────────────────────────────
+            TextFormField(
+              controller: _originalPriceController,
+              decoration: const InputDecoration(
+                labelText: 'Original Price (₹)',
+                border: OutlineInputBorder(),
+                prefixText: '₹ ',
+              ),
+              keyboardType:
+                  const TextInputType.numberWithOptions(decimal: true),
+              validator: (v) {
+                if (v != null && v.trim().isNotEmpty &&
+                    double.tryParse(v.trim()) == null) {
+                  return 'Enter a valid number';
+                }
+                return null;
+              },
+            ),
+            const SizedBox(height: 16),
+
+            // ── Brand ────────────────────────────────────────────────────
+            TextFormField(
+              controller: _brandController,
+              decoration: const InputDecoration(
+                labelText: 'Brand',
+                border: OutlineInputBorder(),
+                helperText: 'E.g. Samsung, Yonex, MRF',
+              ),
+              textCapitalization: TextCapitalization.words,
+            ),
+            const SizedBox(height: 16),
+
+            // ── Known Issues ─────────────────────────────────────────────
+            TextFormField(
+              controller: _knownIssuesController,
+              decoration: const InputDecoration(
+                labelText: 'Known Issues',
+                border: OutlineInputBorder(),
+                helperText: 'Any defects or issues',
+              ),
+              maxLines: 2,
+              textCapitalization: TextCapitalization.sentences,
             ),
             const SizedBox(height: 16),
 

@@ -56,7 +56,7 @@ class ItemProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> deleteItem(int id) async {
+  Future<void> deleteItem(String id) async {
     await _db.deleteItem(id);
     _items.removeWhere((i) => i.id == id);
     notifyListeners();

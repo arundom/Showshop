@@ -1,12 +1,22 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'config/supabase_config.dart';
 import 'providers/item_provider.dart';
 import 'screens/home_screen.dart';
 import 'services/sync_service.dart';
 
-void main() {
+/// The Supabase client — available globally after [main] initialises it.
+SupabaseClient get supabase => Supabase.instance.client;
+
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  await Supabase.initialize(
+    url: SupabaseConfig.supabaseUrl,
+    anonKey: SupabaseConfig.supabaseAnonKey,
+  );
 
   // Start background sync listener.
   final syncService = SyncService();
