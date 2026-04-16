@@ -24,6 +24,11 @@ class DatabaseService {
   static const String _imagesTable = 'item_images';
   static const int _dbVersion = 2;
 
+  bool _isRemoteUrl(String value) {
+    final uri = Uri.tryParse(value);
+    return uri != null && (uri.scheme == 'http' || uri.scheme == 'https');
+  }
+
   Future<Database> get database async {
     _database ??= await _initDatabase();
     return _database!;
@@ -234,7 +239,7 @@ class DatabaseService {
         'image_url': imageUrl,
         'display_order': displayOrder,
         'created_at': DateTime.now().toIso8601String(),
-        'synced': 0,
+        'synced': _isRemoteUrl(imageUrl) ? 1 : 0,
       },
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
@@ -244,6 +249,47 @@ class DatabaseService {
   Future<void> deleteItemImages(String itemId) async {
     final db = await database;
     await db.delete(_imagesTable, where: 'item_id = ?', whereArgs: [itemId]);
+  }
+
+  /// Replaces all image rows for [itemId] with [imageUrls] in display order.
+  Future<void> replaceItemImages({
+    required String itemId,
+    required List<String> imageUrls,
+  }) async {
+    final db = await database;
+    final now = DateTime.now().toIso8601String();
+    await db.transaction((txn) async {
+      await txn.delete(_imagesTable, where: 'item_id = ?', whereArgs: [itemId]);
+      for (var index = 0; index < imageUrls.length; index++) {
+        final imageUrl = imageUrls[index];
+        await txn.insert(
+          _imagesTable,
+          {
+            'id': '${itemId}_${index}_$now',
+            'item_id': itemId,
+            'image_url': imageUrl,
+            'display_order': index,
+            'created_at': now,
+            'synced': _isRemoteUrl(imageUrl) ? 1 : 0,
+          },
+          conflictAlgorithm: ConflictAlgorithm.replace,
+        );
+      }
+    });
+  }
+
+  /// Marks an image row as synced and replaces its stored path with [imageUrl].
+  Future<void> markItemImageSynced({
+    required String id,
+    required String imageUrl,
+  }) async {
+    final db = await database;
+    await db.update(
+      _imagesTable,
+      {'image_url': imageUrl, 'synced': 1},
+      where: 'id = ?',
+      whereArgs: [id],
+    );
   }
 
   // ── Sync helpers ────────────────────────────────────────────────────────────

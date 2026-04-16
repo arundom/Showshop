@@ -1,9 +1,13 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
 import '../models/item.dart';
 import '../providers/item_provider.dart';
+import '../services/database_service.dart';
 
 /// Form screen for editing an existing [Item].
 ///
@@ -21,6 +25,8 @@ class EditItemScreen extends StatefulWidget {
 
 class _EditItemScreenState extends State<EditItemScreen> {
   final _formKey = GlobalKey<FormState>();
+  final _db = DatabaseService();
+  final _picker = ImagePicker();
   late final TextEditingController _titleController;
   late final TextEditingController _descController;
   late final TextEditingController _priceController;
@@ -33,6 +39,7 @@ class _EditItemScreenState extends State<EditItemScreen> {
   late final TextEditingController _notesController;
 
   late DateTime _listingDate;
+  late List<String> _imageUrls;
   bool _isSaving = false;
 
   static final _dateFormat = DateFormat('dd MMM yyyy');
@@ -54,6 +61,7 @@ class _EditItemScreenState extends State<EditItemScreen> {
         TextEditingController(text: i.sellerContact ?? '');
     _notesController = TextEditingController(text: i.notes ?? '');
     _listingDate = i.listingDate;
+    _imageUrls = List<String>.from(i.imageUrls.take(4));
   }
 
   @override
@@ -84,6 +92,28 @@ class _EditItemScreenState extends State<EditItemScreen> {
   String? _nonEmpty(String text) =>
       text.trim().isEmpty ? null : text.trim();
 
+  Future<void> _pickImage(int index) async {
+    final picked = await _picker.pickImage(
+      source: ImageSource.gallery,
+      imageQuality: 85,
+      maxWidth: 1800,
+    );
+    if (picked == null) return;
+
+    setState(() {
+      if (_imageUrls.length > index) {
+        _imageUrls[index] = picked.path;
+      } else {
+        _imageUrls.add(picked.path);
+      }
+    });
+  }
+
+  void _removeImage(int index) {
+    if (_imageUrls.length <= index) return;
+    setState(() => _imageUrls.removeAt(index));
+  }
+
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _isSaving = true);
@@ -91,7 +121,7 @@ class _EditItemScreenState extends State<EditItemScreen> {
     // Construct a fresh Item so optional fields can be cleared to null.
     final updated = Item(
       id: widget.item.id,
-      imageUrls: widget.item.imageUrls,
+      imageUrls: List<String>.unmodifiable(_imageUrls),
       createdAt: widget.item.createdAt,
       title: _nonEmpty(_titleController.text),
       description: _descController.text.trim(),
@@ -111,6 +141,10 @@ class _EditItemScreenState extends State<EditItemScreen> {
     );
 
     try {
+      final itemId = widget.item.id;
+      if (itemId != null) {
+        await _db.replaceItemImages(itemId: itemId, imageUrls: updated.imageUrls);
+      }
       await context.read<ItemProvider>().updateItem(updated);
       if (mounted) Navigator.of(context).pop(updated);
     } catch (e) {
@@ -154,6 +188,128 @@ class _EditItemScreenState extends State<EditItemScreen> {
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
+            const Text(
+              'Images',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 12),
+            GridView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: 4,
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 2,
+                mainAxisSpacing: 12,
+                crossAxisSpacing: 12,
+                childAspectRatio: 1.1,
+              ),
+              itemBuilder: (context, index) {
+                final hasImage = _imageUrls.length > index;
+                final imageUrl = hasImage ? _imageUrls[index] : '';
+                final isRemoteImage = hasImage &&
+                  (imageUrl.startsWith('http://') ||
+                    imageUrl.startsWith('https://'));
+
+                return GestureDetector(
+                  onTap: () => _pickImage(index),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: Colors.grey.shade400),
+                      color: Colors.grey.shade50,
+                    ),
+                    child: Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        if (hasImage)
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(16),
+                            child: isRemoteImage
+                                ? Image.network(imageUrl, fit: BoxFit.cover)
+                                : Image.file(File(imageUrl), fit: BoxFit.cover),
+                          )
+                        else
+                          Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: const [
+                              Icon(Icons.add_photo_alternate_outlined, size: 32),
+                              SizedBox(height: 8),
+                              Text('Add image'),
+                            ],
+                          ),
+                        Positioned(
+                          left: 8,
+                          bottom: 8,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 4,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.black54,
+                              borderRadius: BorderRadius.circular(999),
+                            ),
+                            child: Text(
+                              'Image ${index + 1}',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ),
+                        ),
+                        Positioned(
+                          right: 8,
+                          top: 8,
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Container(
+                                decoration: const BoxDecoration(
+                                  color: Colors.black54,
+                                  shape: BoxShape.circle,
+                                ),
+                                child: IconButton(
+                                  onPressed: () => _pickImage(index),
+                                  icon: const Icon(
+                                    Icons.edit_outlined,
+                                    color: Colors.white,
+                                    size: 18,
+                                  ),
+                                ),
+                              ),
+                              if (hasImage) const SizedBox(width: 8),
+                              if (hasImage)
+                                Container(
+                                  decoration: const BoxDecoration(
+                                    color: Colors.black54,
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: IconButton(
+                                    onPressed: () => _removeImage(index),
+                                    icon: const Icon(
+                                      Icons.close,
+                                      color: Colors.white,
+                                      size: 18,
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'You can keep up to 4 images. Tap a slot to add or replace.',
+              style: TextStyle(color: Colors.grey.shade700),
+            ),
+            const SizedBox(height: 24),
+
             // ── Title ──────────────────────────────────────────────────
             TextFormField(
               controller: _titleController,

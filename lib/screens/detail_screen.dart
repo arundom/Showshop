@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
@@ -96,6 +98,10 @@ class _DetailScreenState extends State<DetailScreen> {
                   childAspectRatio: 2.2,
                   children: List.generate(4, (index) {
                     final hasImage = item.imageUrls.length > index;
+                    final imageUrl = hasImage ? item.imageUrls[index] : '';
+                    final isRemoteImage = hasImage &&
+                      (imageUrl.startsWith('http://') ||
+                        imageUrl.startsWith('https://'));
                     return Container(
                       decoration: BoxDecoration(
                         color: Colors.white,
@@ -105,18 +111,33 @@ class _DetailScreenState extends State<DetailScreen> {
                         child: hasImage
                             ? ClipRRect(
                                 borderRadius: BorderRadius.circular(30),
-                                child: Image.network(
-                                  item.imageUrls[index],
-                                  fit: BoxFit.cover,
-                                  width: double.infinity,
-                                  height: double.infinity,
-                                  errorBuilder: (context, error, stackTrace) =>
-                                      Text(
-                                    'image ${index + 1}',
-                                    style: const TextStyle(
-                                        fontSize: 14, color: Colors.black54),
-                                  ),
-                                ),
+                                child: isRemoteImage
+                                    ? Image.network(
+                                    imageUrl,
+                                        fit: BoxFit.cover,
+                                        width: double.infinity,
+                                        height: double.infinity,
+                                        errorBuilder:
+                                            (context, error, stackTrace) => Text(
+                                          'image ${index + 1}',
+                                          style: const TextStyle(
+                                              fontSize: 14,
+                                              color: Colors.black54),
+                                        ),
+                                      )
+                                    : Image.file(
+                                        File(imageUrl),
+                                        fit: BoxFit.cover,
+                                        width: double.infinity,
+                                        height: double.infinity,
+                                        errorBuilder:
+                                            (context, error, stackTrace) => Text(
+                                          'image ${index + 1}',
+                                          style: const TextStyle(
+                                              fontSize: 14,
+                                              color: Colors.black54),
+                                        ),
+                                      ),
                               )
                             : Text(
                                 'image ${index + 1}',

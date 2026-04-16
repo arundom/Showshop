@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'dart:math';
 
 import 'package:connectivity_plus/connectivity_plus.dart';
@@ -99,6 +100,11 @@ class SyncService {
   bool _isOnline(ConnectivityResult result) =>
       result != ConnectivityResult.none;
 
+  bool _isRemoteUrl(String value) {
+    final uri = Uri.tryParse(value);
+    return uri != null && (uri.scheme == 'http' || uri.scheme == 'https');
+  }
+
   Future<void> _syncPendingItems() async {
     if (_isSyncing) return;
     _isSyncing = true;
@@ -154,10 +160,19 @@ class SyncService {
       for (var i = 0; i < images.length; i++) {
         final img = images[i];
         if ((img['synced'] as int? ?? 0) == 0) {
-          await _remote.addItemImage(
-            localId,
-            img['image_url'] as String,
-            img['display_order'] as int? ?? i,
+          final rawImageUrl = img['image_url'] as String;
+          final displayOrder = img['display_order'] as int? ?? i;
+          final imageRowId = img['id'] as String;
+
+          var remoteImageUrl = rawImageUrl;
+          if (!_isRemoteUrl(rawImageUrl)) {
+            remoteImageUrl = await _remote.uploadImage(File(rawImageUrl), localId);
+          }
+
+          await _remote.addItemImage(localId, remoteImageUrl, displayOrder);
+          await _db.markItemImageSynced(
+            id: imageRowId,
+            imageUrl: remoteImageUrl,
           );
         }
       }
