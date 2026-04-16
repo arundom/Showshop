@@ -41,7 +41,7 @@ class SupabaseService {
         .maybeSingle();
 
     if (response == null) return null;
-    return Item.fromJson(response as Map<String, dynamic>);
+    return Item.fromJson(response);
   }
 
   /// Creates a new item in Supabase and returns its assigned UUID.
@@ -77,9 +77,17 @@ class SupabaseService {
         .from(SupabaseConfig.imageBucket)
         .upload(fileName, imageFile);
 
-    return _client.storage
-        .from(SupabaseConfig.imageBucket)
-        .getPublicUrl(fileName);
+    try {
+      // Prefer a long-lived signed URL so private buckets still render images.
+      return await _client.storage
+          .from(SupabaseConfig.imageBucket)
+          .createSignedUrl(fileName, 60 * 60 * 24 * 365);
+    } catch (_) {
+      // Fallback for public buckets or projects without signed-url permissions.
+      return _client.storage
+          .from(SupabaseConfig.imageBucket)
+          .getPublicUrl(fileName);
+    }
   }
 
   /// Inserts a record into `item_images` linking [imageUrl] to [itemId].
@@ -93,6 +101,23 @@ class SupabaseService {
       'image_url': imageUrl,
       'display_order': displayOrder,
     });
+  }
+
+  /// Replaces all image rows for [itemId] with [imageUrls] in display order.
+  Future<void> replaceItemImages(String itemId, List<String> imageUrls) async {
+    await _client.from('item_images').delete().eq('item_id', itemId);
+    if (imageUrls.isEmpty) return;
+
+    await _client.from('item_images').insert(
+      List.generate(
+        imageUrls.length,
+        (index) => {
+          'item_id': itemId,
+          'image_url': imageUrls[index],
+          'display_order': index,
+        },
+      ),
+    );
   }
 
   /// Removes an image file from Storage given its full public [imageUrl].

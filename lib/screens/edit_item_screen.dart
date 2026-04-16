@@ -8,6 +8,7 @@ import 'package:provider/provider.dart';
 import '../models/item.dart';
 import '../providers/item_provider.dart';
 import '../services/database_service.dart';
+import '../services/supabase_service.dart';
 
 /// Form screen for editing an existing [Item].
 ///
@@ -26,6 +27,7 @@ class EditItemScreen extends StatefulWidget {
 class _EditItemScreenState extends State<EditItemScreen> {
   final _formKey = GlobalKey<FormState>();
   final _db = DatabaseService();
+  final _remote = SupabaseService();
   final _picker = ImagePicker();
   late final TextEditingController _titleController;
   late final TextEditingController _descController;
@@ -41,6 +43,7 @@ class _EditItemScreenState extends State<EditItemScreen> {
   late DateTime _listingDate;
   late List<String> _imageUrls;
   bool _isSaving = false;
+  int? _uploadingImageIndex;
 
   static final _dateFormat = DateFormat('dd MMM yyyy');
 
@@ -93,6 +96,16 @@ class _EditItemScreenState extends State<EditItemScreen> {
       text.trim().isEmpty ? null : text.trim();
 
   Future<void> _pickImage(int index) async {
+    final itemId = widget.item.id;
+    if (itemId == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Save item first before uploading images.')),
+        );
+      }
+      return;
+    }
+
     final picked = await _picker.pickImage(
       source: ImageSource.gallery,
       imageQuality: 85,
@@ -100,13 +113,26 @@ class _EditItemScreenState extends State<EditItemScreen> {
     );
     if (picked == null) return;
 
-    setState(() {
-      if (_imageUrls.length > index) {
-        _imageUrls[index] = picked.path;
-      } else {
-        _imageUrls.add(picked.path);
+    setState(() => _uploadingImageIndex = index);
+    try {
+      final remoteUrl = await _remote.uploadImage(File(picked.path), itemId);
+      if (!mounted) return;
+      setState(() {
+        if (_imageUrls.length > index) {
+          _imageUrls[index] = remoteUrl;
+        } else {
+          _imageUrls.add(remoteUrl);
+        }
+      });
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Image upload failed: $e')),
+        );
       }
-    });
+    } finally {
+      if (mounted) setState(() => _uploadingImageIndex = null);
+    }
   }
 
   void _removeImage(int index) {
@@ -143,6 +169,7 @@ class _EditItemScreenState extends State<EditItemScreen> {
     try {
       final itemId = widget.item.id;
       if (itemId != null) {
+        await _remote.replaceItemImages(itemId, updated.imageUrls);
         await _db.replaceItemImages(itemId: itemId, imageUrls: updated.imageUrls);
       }
       await context.read<ItemProvider>().updateItem(updated);
@@ -236,6 +263,13 @@ class _EditItemScreenState extends State<EditItemScreen> {
                               SizedBox(height: 8),
                               Text('Add image'),
                             ],
+                          ),
+                        if (_uploadingImageIndex == index)
+                          Container(
+                            color: Colors.black38,
+                            child: const Center(
+                              child: CircularProgressIndicator(),
+                            ),
                           ),
                         Positioned(
                           left: 8,
