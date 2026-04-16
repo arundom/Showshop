@@ -1,9 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
 import '../models/item.dart';
 import '../providers/item_provider.dart';
+import '../services/sync_service.dart';
 import 'add_item_screen.dart';
 import 'detail_screen.dart';
 
@@ -21,14 +24,35 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   static final _dateFormat = DateFormat('dd MMM yyyy');
   static final _priceFormat = NumberFormat.currency(symbol: '₹');
+  final SyncService _syncService = SyncService();
+  StreamSubscription<String>? _syncErrorSubscription;
 
   @override
   void initState() {
     super.initState();
+    _syncErrorSubscription = _syncService.errors.listen((message) {
+      if (!mounted) return;
+      final messenger = ScaffoldMessenger.of(context);
+      messenger
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(
+            content: Text(message),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+    });
+
     // Load items after the first frame so the widget tree is ready.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<ItemProvider>().loadItems();
     });
+  }
+
+  @override
+  void dispose() {
+    _syncErrorSubscription?.cancel();
+    super.dispose();
   }
 
   @override
@@ -90,7 +114,7 @@ class _HomeScreenState extends State<HomeScreen> {
           columnSpacing: 24,
           columns: const [
             DataColumn(label: Text('#', style: TextStyle(fontWeight: FontWeight.bold))),
-            DataColumn(label: Text('Description', style: TextStyle(fontWeight: FontWeight.bold))),
+            DataColumn(label: Text('Title', style: TextStyle(fontWeight: FontWeight.bold))),
             DataColumn(
               label: Text('Price', style: TextStyle(fontWeight: FontWeight.bold)),
               numeric: true,
@@ -102,7 +126,7 @@ class _HomeScreenState extends State<HomeScreen> {
             return DataRow(
               cells: [
                 DataCell(Text('${index + 1}')),
-                DataCell(_buildDescriptionLink(context, item)),
+                DataCell(_buildTitleLink(context, item)),
                 DataCell(Text(_priceFormat.format(item.price))),
                 DataCell(Text(_dateFormat.format(item.listingDate))),
               ],
@@ -113,11 +137,11 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildDescriptionLink(BuildContext context, Item item) {
+  Widget _buildTitleLink(BuildContext context, Item item) {
     return GestureDetector(
       onTap: () => _openDetail(context, item),
       child: Text(
-        item.description,
+        item.title?.isEmpty ?? true ? '(No title)' : item.title!,
         style: TextStyle(
           color: Theme.of(context).colorScheme.primary,
           decoration: TextDecoration.underline,

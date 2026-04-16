@@ -2,14 +2,19 @@ import 'package:flutter/foundation.dart';
 
 import '../models/item.dart';
 import '../services/database_service.dart';
+import '../services/sync_service.dart';
 
 /// Provides the list of [Item] objects to the widget tree and exposes
 /// methods to add, update, and delete items.
 class ItemProvider extends ChangeNotifier {
-  ItemProvider({DatabaseService? databaseService})
-      : _db = databaseService ?? DatabaseService();
+  ItemProvider({
+    DatabaseService? databaseService,
+    SyncService? syncService,
+  })  : _db = databaseService ?? DatabaseService(),
+        _syncService = syncService ?? SyncService();
 
   final DatabaseService _db;
+  final SyncService _syncService;
 
   List<Item> _items = [];
   bool _isLoading = false;
@@ -44,6 +49,10 @@ class ItemProvider extends ChangeNotifier {
     // Re-sort by listing date descending so the new item appears at top.
     _items.sort((a, b) => b.listingDate.compareTo(a.listingDate));
     notifyListeners();
+
+    // Best-effort background sync; local save should not wait on network.
+    // ignore: unawaited_futures
+    _syncService.syncPendingNow();
   }
 
   Future<void> updateItem(Item item) async {
@@ -54,11 +63,17 @@ class ItemProvider extends ChangeNotifier {
       _items.sort((a, b) => b.listingDate.compareTo(a.listingDate));
       notifyListeners();
     }
+
+    // ignore: unawaited_futures
+    _syncService.syncPendingNow();
   }
 
   Future<void> deleteItem(String id) async {
     await _db.deleteItem(id);
     _items.removeWhere((i) => i.id == id);
     notifyListeners();
+
+    // ignore: unawaited_futures
+    _syncService.syncPendingNow();
   }
 }

@@ -18,3 +18,10 @@ class SupabaseConfig {
   /// Supabase Storage bucket that holds item images.
   static const String imageBucket = 'item-images';
 }
+
+/*
+       eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9
+      .eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJkeXN6dXRwd2FiaHFpbXZsdHZxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYyMzY1NDcsImV4cCI6MjA5MTgxMjU0N30
+      .fz6BzWiirFWzkTFY_DuPWoJE9qZ5xF8kEKkfrCjpd3s
+      
+*/

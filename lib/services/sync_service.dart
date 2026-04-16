@@ -26,8 +26,13 @@ class SyncService {
   final DatabaseService _db;
   final SupabaseService _remote;
   StreamSubscription<ConnectivityResult>? _connectivitySubscription;
+  final StreamController<String> _errorController =
+      StreamController<String>.broadcast();
 
   bool _isSyncing = false;
+
+  /// Broadcasts user-friendly sync failures for UI feedback.
+  Stream<String> get errors => _errorController.stream;
 
   // ── Lifecycle ───────────────────────────────────────────────────────────────
 
@@ -63,10 +68,23 @@ class SyncService {
         await _db.upsertItem(item);
       }
     } catch (e, st) {
+      _emitSyncError(
+        'Could not fetch latest cloud items. Will retry automatically.',
+      );
       // Network errors are non-fatal; local data remains available.
       // ignore: avoid_print
       print('SyncService.syncFromServer error: $e\n$st');
     }
+  }
+
+  /// Attempts to push pending local items immediately when online.
+  ///
+  /// This is useful right after local writes (add/update/delete) so users do
+  /// not need to restart the app or toggle connectivity to trigger sync.
+  Future<void> syncPendingNow() async {
+    final results = await Connectivity().checkConnectivity();
+    if (!_isOnline(results)) return;
+    await _syncPendingItems();
   }
 
   // ── Internals ───────────────────────────────────────────────────────────────
@@ -135,9 +153,18 @@ class SyncService {
 
       return true;
     } catch (e, st) {
+      _emitSyncError(
+        'Could not sync an item to cloud. Check internet or Supabase policies.',
+      );
       // ignore: avoid_print
       print('SyncService._pushItemToRemote error: $e\n$st');
       return false;
+    }
+  }
+
+  void _emitSyncError(String message) {
+    if (!_errorController.isClosed) {
+      _errorController.add(message);
     }
   }
 }

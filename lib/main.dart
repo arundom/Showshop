@@ -27,7 +27,7 @@ void main() async {
 
   runApp(
     ChangeNotifierProvider(
-      create: (_) => ItemProvider(),
+      create: (_) => ItemProvider(syncService: syncService),
       child: const ShowshopApp(),
     ),
   );
