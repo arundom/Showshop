@@ -13,6 +13,12 @@ SupabaseClient get supabase => Supabase.instance.client;
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
+  if (SupabaseConfig.supabaseAnonKey.startsWith('sb_secret_')) {
+    throw StateError(
+      'Do not use Supabase secret keys in client apps. Use anon/publishable key.',
+    );
+  }
+
   await Supabase.initialize(
     url: SupabaseConfig.supabaseUrl,
     anonKey: SupabaseConfig.supabaseAnonKey,
