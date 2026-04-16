@@ -18,11 +18,14 @@ class ItemProvider extends ChangeNotifier {
 
   List<Item> _items = [];
   bool _isLoading = false;
+  bool _isSyncing = false;
   String? _error;
 
   List<Item> get items => List.unmodifiable(_items);
   bool get isLoading => _isLoading;
+  bool get isSyncing => _isSyncing;
   String? get error => _error;
+  Stream<String> get syncErrors => _syncService.errors;
 
   // ── Data loading ─────────────────────────────────────────────────────────
 
@@ -75,5 +78,29 @@ class ItemProvider extends ChangeNotifier {
 
     // ignore: unawaited_futures
     _syncService.syncPendingNow();
+  }
+
+  /// Explicitly syncs local pending data to cloud and refreshes local data
+  /// from the server.
+  Future<void> syncNow() async {
+    if (_isSyncing) return;
+    _isSyncing = true;
+    _error = null;
+    notifyListeners();
+
+    try {
+      // Force a full upload on explicit user sync so schema/mapping changes
+      // (new columns) are backfilled to existing remote rows.
+      await _db.markAllAsUnsynced();
+      await _syncService.syncPendingNow();
+      await _syncService.syncFromServer();
+      _items = await _db.getAllItems();
+    } catch (e) {
+      _error = e.toString();
+      rethrow;
+    } finally {
+      _isSyncing = false;
+      notifyListeners();
+    }
   }
 }

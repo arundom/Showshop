@@ -270,6 +270,14 @@ class DatabaseService {
     );
   }
 
+  /// Marks all local items as unsynced so they will be re-uploaded.
+  /// Useful when new remote columns are introduced and existing rows need
+  /// backfilling.
+  Future<void> markAllAsUnsynced() async {
+    final db = await database;
+    await db.update(_tableName, {'is_synced': 0});
+  }
+
   /// Upserts an item received from the remote into local SQLite.
   Future<void> upsertItem(Item item) async {
     final db = await database;

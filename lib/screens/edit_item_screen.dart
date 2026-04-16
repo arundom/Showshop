@@ -4,33 +4,57 @@ import 'package:provider/provider.dart';
 
 import '../models/item.dart';
 import '../providers/item_provider.dart';
-import '../services/sync_service.dart';
 
-/// Form screen for adding a new [Item] to the local database.
-class AddItemScreen extends StatefulWidget {
-  const AddItemScreen({super.key});
+/// Form screen for editing an existing [Item].
+///
+/// Pre-fills all fields from [item] and calls [ItemProvider.updateItem] on save.
+/// Pops with the updated [Item] as the navigation result so callers can
+/// refresh their displayed data.
+class EditItemScreen extends StatefulWidget {
+  const EditItemScreen({super.key, required this.item});
+
+  final Item item;
 
   @override
-  State<AddItemScreen> createState() => _AddItemScreenState();
+  State<EditItemScreen> createState() => _EditItemScreenState();
 }
 
-class _AddItemScreenState extends State<AddItemScreen> {
+class _EditItemScreenState extends State<EditItemScreen> {
   final _formKey = GlobalKey<FormState>();
-  final _titleController = TextEditingController();
-  final _descController = TextEditingController();
-  final _priceController = TextEditingController();
-  final _originalPriceController = TextEditingController();
-  final _brandController = TextEditingController();
-  final _knownIssuesController = TextEditingController();
-  final _conditionController = TextEditingController();
-  final _sellerNameController = TextEditingController();
-  final _sellerContactController = TextEditingController();
-  final _notesController = TextEditingController();
+  late final TextEditingController _titleController;
+  late final TextEditingController _descController;
+  late final TextEditingController _priceController;
+  late final TextEditingController _originalPriceController;
+  late final TextEditingController _brandController;
+  late final TextEditingController _knownIssuesController;
+  late final TextEditingController _conditionController;
+  late final TextEditingController _sellerNameController;
+  late final TextEditingController _sellerContactController;
+  late final TextEditingController _notesController;
 
-  DateTime _listingDate = DateTime.now();
+  late DateTime _listingDate;
   bool _isSaving = false;
 
   static final _dateFormat = DateFormat('dd MMM yyyy');
+
+  @override
+  void initState() {
+    super.initState();
+    final i = widget.item;
+    _titleController = TextEditingController(text: i.title ?? '');
+    _descController = TextEditingController(text: i.description);
+    _priceController = TextEditingController(text: i.price.toString());
+    _originalPriceController =
+        TextEditingController(text: i.originalPrice?.toString() ?? '');
+    _brandController = TextEditingController(text: i.brand ?? '');
+    _knownIssuesController = TextEditingController(text: i.knownIssues ?? '');
+    _conditionController = TextEditingController(text: i.condition ?? '');
+    _sellerNameController = TextEditingController(text: i.sellerName ?? '');
+    _sellerContactController =
+        TextEditingController(text: i.sellerContact ?? '');
+    _notesController = TextEditingController(text: i.notes ?? '');
+    _listingDate = i.listingDate;
+  }
 
   @override
   void dispose() {
@@ -54,53 +78,41 @@ class _AddItemScreenState extends State<AddItemScreen> {
       firstDate: DateTime(2000),
       lastDate: DateTime.now(),
     );
-    if (picked != null) {
-      setState(() => _listingDate = picked);
-    }
+    if (picked != null) setState(() => _listingDate = picked);
   }
+
+  String? _nonEmpty(String text) =>
+      text.trim().isEmpty ? null : text.trim();
 
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
-
     setState(() => _isSaving = true);
 
-    final now = DateTime.now();
-    final item = Item(
-      id: generateUuid(),
-      title: _titleController.text.trim().isEmpty
-          ? null
-          : _titleController.text.trim(),
+    // Construct a fresh Item so optional fields can be cleared to null.
+    final updated = Item(
+      id: widget.item.id,
+      imageUrls: widget.item.imageUrls,
+      createdAt: widget.item.createdAt,
+      title: _nonEmpty(_titleController.text),
       description: _descController.text.trim(),
       price: double.parse(_priceController.text.trim()),
-      originalPrice: _originalPriceController.text.trim().isEmpty
-          ? null
-          : double.tryParse(_originalPriceController.text.trim()),
-      brand: _brandController.text.trim().isEmpty
-          ? null
-          : _brandController.text.trim(),
-      knownIssues: _knownIssuesController.text.trim().isEmpty
-          ? null
-          : _knownIssuesController.text.trim(),
+      originalPrice: _nonEmpty(_originalPriceController.text) != null
+          ? double.tryParse(_originalPriceController.text.trim())
+          : null,
+      brand: _nonEmpty(_brandController.text),
+      knownIssues: _nonEmpty(_knownIssuesController.text),
       listingDate: _listingDate,
-      condition: _conditionController.text.trim().isEmpty
-          ? null
-          : _conditionController.text.trim(),
-      sellerName: _sellerNameController.text.trim().isEmpty
-          ? null
-          : _sellerNameController.text.trim(),
-      sellerContact: _sellerContactController.text.trim().isEmpty
-          ? null
-          : _sellerContactController.text.trim(),
-      notes: _notesController.text.trim().isEmpty
-          ? null
-          : _notesController.text.trim(),
-      createdAt: now,
-      updatedAt: now,
+      condition: _nonEmpty(_conditionController.text),
+      sellerName: _nonEmpty(_sellerNameController.text),
+      sellerContact: _nonEmpty(_sellerContactController.text),
+      notes: _nonEmpty(_notesController.text),
+      isSynced: false,
+      updatedAt: DateTime.now(),
     );
 
     try {
-      await context.read<ItemProvider>().addItem(item);
-      if (mounted) Navigator.of(context).pop();
+      await context.read<ItemProvider>().updateItem(updated);
+      if (mounted) Navigator.of(context).pop(updated);
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -116,7 +128,7 @@ class _AddItemScreenState extends State<AddItemScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Add Item'),
+        title: const Text('Edit Item'),
         actions: [
           if (_isSaving)
             const Center(
@@ -148,7 +160,6 @@ class _AddItemScreenState extends State<AddItemScreen> {
               decoration: const InputDecoration(
                 labelText: 'Title',
                 border: OutlineInputBorder(),
-                helperText: 'E.g. Badminton Racket',
               ),
               textCapitalization: TextCapitalization.words,
             ),
@@ -160,7 +171,6 @@ class _AddItemScreenState extends State<AddItemScreen> {
               decoration: const InputDecoration(
                 labelText: 'Description *',
                 border: OutlineInputBorder(),
-                helperText: 'E.g. Samsung 65" 4K TV – good condition',
               ),
               maxLines: 2,
               textCapitalization: TextCapitalization.sentences,
@@ -177,8 +187,7 @@ class _AddItemScreenState extends State<AddItemScreen> {
                 border: OutlineInputBorder(),
                 prefixText: '₹ ',
               ),
-              keyboardType:
-                  const TextInputType.numberWithOptions(decimal: true),
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
               validator: (v) {
                 if (v == null || v.trim().isEmpty) return 'Price is required';
                 if (double.tryParse(v.trim()) == null) {
@@ -197,10 +206,10 @@ class _AddItemScreenState extends State<AddItemScreen> {
                 border: OutlineInputBorder(),
                 prefixText: '₹ ',
               ),
-              keyboardType:
-                  const TextInputType.numberWithOptions(decimal: true),
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
               validator: (v) {
-                if (v != null && v.trim().isNotEmpty &&
+                if (v != null &&
+                    v.trim().isNotEmpty &&
                     double.tryParse(v.trim()) == null) {
                   return 'Enter a valid number';
                 }
@@ -215,7 +224,6 @@ class _AddItemScreenState extends State<AddItemScreen> {
               decoration: const InputDecoration(
                 labelText: 'Brand',
                 border: OutlineInputBorder(),
-                helperText: 'E.g. Samsung, Yonex, MRF',
               ),
               textCapitalization: TextCapitalization.words,
             ),
@@ -299,7 +307,7 @@ class _AddItemScreenState extends State<AddItemScreen> {
               style: ElevatedButton.styleFrom(
                 minimumSize: const Size.fromHeight(48),
               ),
-              child: const Text('Save Item'),
+              child: const Text('Save Changes'),
             ),
           ],
         ),

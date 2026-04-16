@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:math';
 
 import 'package:connectivity_plus/connectivity_plus.dart';
@@ -122,11 +123,19 @@ class SyncService {
     final localId = item.id!;
 
     try {
+      final payload = item.toJson();
+      // ignore: avoid_print
+      print('[SYNC DEBUG] Pushing item $localId with payload: ${jsonEncode(payload)}');
+
       final existing = await _remote.getItemById(localId);
 
       if (existing != null) {
+        // ignore: avoid_print
+        print('[SYNC DEBUG] Item exists remotely, updating...');
         await _remote.updateItem(localId, item);
       } else {
+        // ignore: avoid_print
+        print('[SYNC DEBUG] Item is new, creating in Supabase...');
         final remoteId = await _remote.createItem(item);
 
         // If the local id differs from the Supabase-assigned id, atomically
@@ -134,6 +143,8 @@ class SyncService {
         if (localId != remoteId) {
           final updated = item.copyWith(id: remoteId, isSynced: true);
           await _db.replaceItem(oldId: localId, newItem: updated);
+          // ignore: avoid_print
+          print('[SYNC DEBUG] Item created with new ID: $remoteId');
           return true;
         }
       }
@@ -151,13 +162,16 @@ class SyncService {
         }
       }
 
+      // ignore: avoid_print
+      print('[SYNC DEBUG] Successfully synced item $localId');
       return true;
     } catch (e, st) {
+      final errorMsg = e.toString();
       _emitSyncError(
-        'Could not sync an item to cloud. Check internet or Supabase policies.',
+        'Sync failed: $errorMsg',
       );
       // ignore: avoid_print
-      print('SyncService._pushItemToRemote error: $e\n$st');
+      print('[SYNC ERROR] Failed to sync item: $e\n$st');
       return false;
     }
   }

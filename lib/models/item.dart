@@ -162,6 +162,10 @@ class Item {
       if (originalPrice != null) 'original_price': originalPrice,
       if (brand != null) 'brand': brand,
       if (knownIssues != null) 'known_issues': knownIssues,
+      if (condition != null) 'condition': condition,
+      if (sellerName != null) 'seller_name': sellerName,
+      if (sellerContact != null) 'seller_contact': sellerContact,
+      if (notes != null) 'notes': notes,
       'listing_date': listingDate.toIso8601String(),
     };
   }
