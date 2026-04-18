@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
 import '../models/item.dart';
+import '../providers/admin_auth_provider.dart';
 import '../providers/item_provider.dart';
 import '../services/sync_service.dart';
 
@@ -114,6 +115,16 @@ class _AddItemScreenState extends State<AddItemScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isAdmin = context.watch<AdminAuthProvider>().isAdmin;
+    if (!isAdmin) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Add Item')),
+        body: const Center(
+          child: Text('Admin access required.'),
+        ),
+      );
+    }
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Add Item'),

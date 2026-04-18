@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
 import '../models/item.dart';
+import '../providers/admin_auth_provider.dart';
 import '../providers/item_provider.dart';
 import '../services/database_service.dart';
 import '../services/supabase_service.dart';
@@ -187,6 +188,16 @@ class _EditItemScreenState extends State<EditItemScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isAdmin = context.watch<AdminAuthProvider>().isAdmin;
+    if (!isAdmin) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Edit Item')),
+        body: const Center(
+          child: Text('Admin access required.'),
+        ),
+      );
+    }
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Edit Item'),

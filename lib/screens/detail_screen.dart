@@ -2,8 +2,10 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:provider/provider.dart';
 
 import '../models/item.dart';
+import '../providers/admin_auth_provider.dart';
 import 'edit_item_screen.dart';
 
 /// Displays the full details of a single [Item].
@@ -43,6 +45,7 @@ class _DetailScreenState extends State<DetailScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isAdmin = context.watch<AdminAuthProvider>().isAdmin;
     final item = _item;
     return Scaffold(
       extendBodyBehindAppBar: true,
@@ -52,11 +55,12 @@ class _DetailScreenState extends State<DetailScreen> {
         iconTheme: const IconThemeData(color: Colors.white),
         title: const Text('Item Details', style: TextStyle(color: Colors.white)),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.edit_outlined, color: Colors.white),
-            tooltip: 'Edit item',
-            onPressed: _openEdit,
-          ),
+          if (isAdmin)
+            IconButton(
+              icon: const Icon(Icons.edit_outlined, color: Colors.white),
+              tooltip: 'Edit item',
+              onPressed: _openEdit,
+            ),
         ],
       ),
       body: Container(
@@ -162,7 +166,7 @@ class _DetailScreenState extends State<DetailScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Current Price',
+                        'Offer Price',
                         style: TextStyle(
                           fontSize: 14,
                           fontWeight: FontWeight.w500,

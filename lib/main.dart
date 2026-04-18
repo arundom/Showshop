@@ -3,8 +3,9 @@ import 'package:provider/provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'config/supabase_config.dart';
+import 'providers/admin_auth_provider.dart';
 import 'providers/item_provider.dart';
-import 'screens/home_screen.dart';
+import 'screens/splash_screen.dart';
 import 'services/sync_service.dart';
 
 /// The Supabase client — available globally after [main] initialises it.
@@ -32,8 +33,13 @@ void main() async {
   syncService.syncOnStartup();
 
   runApp(
-    ChangeNotifierProvider(
-      create: (_) => ItemProvider(syncService: syncService),
+    MultiProvider(
+      providers: [
+        ChangeNotifierProvider(create: (_) => AdminAuthProvider()),
+        ChangeNotifierProvider(
+          create: (_) => ItemProvider(syncService: syncService),
+        ),
+      ],
       child: const ShowshopApp(),
     ),
   );
@@ -57,7 +63,7 @@ class ShowshopApp extends StatelessWidget {
           foregroundColor: Colors.white,
         ),
       ),
-      home: const HomeScreen(),
+      home: const SplashScreen(),
     );
   }
 }
