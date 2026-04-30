@@ -71,7 +71,7 @@ class SyncService {
       }
     } catch (e, st) {
       _emitSyncError(
-        'Could not fetch latest cloud items. Will retry automatically.',
+        'Could not fetch latest cloud items: $e. Will retry automatically.',
       );
       // Network errors are non-fatal; local data remains available.
       // ignore: avoid_print
