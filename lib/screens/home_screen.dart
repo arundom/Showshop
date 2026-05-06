@@ -284,11 +284,12 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     try {
       await provider.syncNow();
       if (!mounted) return;
+      final itemCount = provider.items.length;
       ScaffoldMessenger.of(context)
         ..hideCurrentSnackBar()
         ..showSnackBar(
-          const SnackBar(
-            content: Text('Sync completed'),
+          SnackBar(
+            content: Text('Sync completed. Loaded $itemCount items.'),
             behavior: SnackBarBehavior.floating,
           ),
         );

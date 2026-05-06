@@ -30,11 +30,16 @@ class SyncService {
   StreamSubscription<ConnectivityResult>? _connectivitySubscription;
   final StreamController<String> _errorController =
       StreamController<String>.broadcast();
+  final StreamController<void> _syncCompletedController =
+      StreamController<void>.broadcast();
 
   bool _isSyncing = false;
 
   /// Broadcasts user-friendly sync failures for UI feedback.
   Stream<String> get errors => _errorController.stream;
+
+  /// Fires whenever a background sync process finishes successfully.
+  Stream<void> get onSyncCompleted => _syncCompletedController.stream;
 
   // ── Lifecycle ───────────────────────────────────────────────────────────────
 
@@ -66,8 +71,17 @@ class SyncService {
   Future<void> syncFromServer() async {
     try {
       final remoteItems = await _remote.getItems();
+      // ignore: avoid_print
+      print('[SYNC DEBUG] Fetched ${remoteItems.length} items from Supabase');
       for (final item in remoteItems) {
-        await _db.upsertItem(item);
+        try {
+          await _db.upsertItem(item);
+          // ignore: avoid_print
+          print('[SYNC DEBUG] Upserted item ${item.id}');
+        } catch (e, st) {
+          // ignore: avoid_print
+          print('[SYNC ERROR] Failed to upsert item ${item.id}: $e\n$st');
+        }
       }
     } catch (e, st) {
       _emitSyncError(
@@ -116,6 +130,7 @@ class SyncService {
           await _db.markAsSynced(item.id!);
         }
       }
+      _syncCompletedController.add(null);
     } finally {
       _isSyncing = false;
     }

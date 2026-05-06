@@ -27,6 +27,8 @@ class SupabaseService {
         .select('*, item_images(image_url, display_order)')
         .order('listing_date', ascending: false);
 
+    // ignore: avoid_print
+    print('[SUPABASE DEBUG] Raw response: $response');
     return (response as List)
         .map((row) => Item.fromJson(row as Map<String, dynamic>))
         .toList();

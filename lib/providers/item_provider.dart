@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 
 import '../models/item.dart';
@@ -11,10 +13,25 @@ class ItemProvider extends ChangeNotifier {
     DatabaseService? databaseService,
     SyncService? syncService,
   })  : _db = databaseService ?? DatabaseService(),
-        _syncService = syncService ?? SyncService();
+        _syncService = syncService ?? SyncService() {
+    _setupSyncListener();
+  }
 
   final DatabaseService _db;
   final SyncService _syncService;
+  StreamSubscription<void>? _syncSubscription;
+
+  void _setupSyncListener() {
+    _syncSubscription = _syncService.onSyncCompleted.listen((_) {
+      loadItems();
+    });
+  }
+
+  @override
+  void dispose() {
+    _syncSubscription?.cancel();
+    super.dispose();
+  }
 
   List<Item> _items = [];
   bool _isLoading = false;
@@ -95,6 +112,8 @@ class ItemProvider extends ChangeNotifier {
       await _syncService.syncPendingNow();
       await _syncService.syncFromServer();
       _items = await _db.getAllItems();
+      // ignore: avoid_print
+      print('[SYNC DEBUG] Loaded ${_items.length} items from local DB after sync');
     } catch (e) {
       _error = e.toString();
       rethrow;
